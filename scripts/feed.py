@@ -15,7 +15,7 @@ from html.parser import HTMLParser
 from io import BytesIO
 from pathlib import Path
 from string import Template
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -26,6 +26,7 @@ FEED_FILE = "data/feed.json"
 RUN_FILE = ".cache/run.json"
 INPUT_FILE = ".cache/input.jsonl"
 TRANSLATIONS_FILE = ".cache/translations.json"
+ERROR_FILE = ".cache/error.log"
 SITE_DIRECTORY = ".cache/site"
 MAX_RESPONSE_BYTES = 2_000_000
 HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
@@ -101,6 +102,32 @@ def web_url(value):
 
 def is_hn_url(url):
     return urlparse(url).hostname == HN_HOST
+
+
+def canonical_article_url(url):
+    parsed = urlparse(url)
+    tracking_parameters = {"fbclid", "gclid", "msclkid"}
+    parameters = [
+        (name, value)
+        for name, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if not name.lower().startswith("utm_")
+        and name.lower() not in tracking_parameters
+    ]
+
+    return parsed._replace(
+        scheme=parsed.scheme.lower(),
+        netloc=parsed.netloc.lower(),
+        query=urlencode(parameters),
+    ).geturl()
+
+
+def unique_by(values, key):
+    unique = {}
+
+    for value in values:
+        unique.setdefault(key(value), value)
+
+    return list(unique.values())
 
 
 def read_limited(stream):
@@ -310,23 +337,39 @@ def parse_rss(body):
     channel = ET.fromstring(body).find("channel")
     require(channel is not None, "RSS channel is missing")
 
-    articles = {}
-
-    for node in channel.findall("item"):
-        article = parse_rss_item(node)
-        articles.setdefault(article["id"], article)
+    articles = [parse_rss_item(node) for node in channel.findall("item")]
+    articles = unique_by(articles, lambda article: article["id"])
+    articles = unique_by(articles, lambda article: canonical_article_url(article["url"]))
 
     require(articles, "RSS is empty; keeping the previous feed")
-    return list(articles.values())
+    return articles
+
+
+def translation_key(article):
+    return canonical_article_url(article["url"]), article["title"]
 
 
 def has_cached_translation(article, cached):
     return (
-        cached.get("url") == article["url"]
-        and cached.get("title") == article["title"]
-        and bool(cached.get("title_ko"))
+        bool(cached.get("title_ko"))
         and "summary" in cached
+        and translation_key(cached) == translation_key(article)
     )
+
+
+def index_translations(stories):
+    translations = {}
+
+    for article in stories.values():
+        if not article.get("title_ko") or "summary" not in article:
+            continue
+
+        key = translation_key(article)
+
+        if key not in translations or article["summary"]:
+            translations[key] = article
+
+    return translations
 
 
 def article_metadata(article):
@@ -389,19 +432,14 @@ def collect_article_source(article, previous_thumbnail):
 
 
 def enrich(article, cache):
-    cached = cache.get(article["id"], {})
+    cached = cache.get(translation_key(article), {})
     metadata = article_metadata(article)
 
     if has_cached_translation(article, cached):
         source = source_data(cached["source_status"], thumbnail=cached.get("thumbnail"))
         return {**metadata, **source}
 
-    unchanged_source = (
-        cached.get("url") == article["url"]
-        and cached.get("title") == article["title"]
-    )
-    thumbnail = cached.get("thumbnail") if unchanged_source else None
-    source = collect_article_source(article, thumbnail)
+    source = collect_article_source(article, None)
     return {**metadata, **source}
 
 
@@ -417,7 +455,7 @@ def translation_requests(articles, cache, source_chars):
     return [
         [article["id"], article["title"], article["source_text"][:source_chars]]
         for article in articles
-        if not has_cached_translation(article, cache.get(article["id"], {}))
+        if not has_cached_translation(article, cache.get(translation_key(article), {}))
     ]
 
 
@@ -550,9 +588,10 @@ def save_run(run, input_text):
 
 def apply_translations(previous, run, translations):
     stories = dict(previous["stories"])
+    cache = index_translations(stories)
 
     for article in run["items"]:
-        translation = translations.get(article["id"]) or stories[article["id"]]
+        translation = translations.get(article["id"]) or cache[translation_key(article)]
         stories[article["id"]] = {
             **article,
             "title_ko": translation["title_ko"],
@@ -777,7 +816,7 @@ def prepare(rss_file=None, source_chars=2400, refresh=False):
     if existing is not None:
         return {"run": existing["id"], "pending": len(existing["pending"]), "resumed": True}
 
-    cache = read_json(ROOT / FEED_FILE)["stories"]
+    cache = index_translations(read_json(ROOT / FEED_FILE)["stories"])
     articles = collect_articles(rss_file, cache)
     requests = translation_requests(articles, cache, source_chars)
     input_text = json_lines(requests)
@@ -859,6 +898,34 @@ def parse_arguments():
     return arguments
 
 
+def report_result(command, result):
+    output_fields = {
+        "prepare": ("run", "pending"),
+        "publish": ("articles", "translated"),
+    }
+    fields = output_fields.get(command)
+
+    if fields is not None:
+        output = {field: result[field] for field in fields}
+        print(json_text(output, compact=True))
+
+
+def report_error(error):
+    detail = str(error)
+
+    try:
+        write_text(ROOT / ERROR_FILE, detail + "\n")
+    except OSError:
+        pass
+
+    summary = compact_text(detail)
+
+    if len(summary) > 240:
+        summary = summary[:237] + "..."
+
+    print(f"error: {summary}", file=sys.stderr)
+
+
 def main():
     arguments = parse_arguments()
 
@@ -873,12 +940,12 @@ def main():
     else:
         result = build_site()
 
-    print(json.dumps(result))
+    report_result(arguments.command, result)
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"Feed update failed: {error}", file=sys.stderr)
+        report_error(error)
         sys.exit(1)
