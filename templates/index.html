@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="해커뉴스 한국어 요약">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="referrer" content="no-referrer">
+  <title>hnfront</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <style>
+    :root { color-scheme: light; --paper: #fff; --ink: #222; --muted: #888; --accent: #ff6600; }
+    * { box-sizing: border-box; }
+    body { margin: 0; border-top: 3px solid var(--accent); background: var(--paper); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    a:hover { color: var(--accent); }
+    a:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; border-radius: 2px; }
+    main { width: min(100% - 48px, 840px); margin: 28px auto 32px; }
+    .skip { position: absolute; top: -60px; left: 20px; padding: 12px; background: var(--ink); color: white; z-index: 3; }
+    .skip:focus { top: 12px; }
+    .feed { padding: 0; margin: 0; list-style: none; }
+    .story { display: flow-root; padding: 24px 0 32px; }
+    h2 { margin: 0; font-size: 18px; line-height: 1.55; font-weight: 600; letter-spacing: -.4px; word-break: keep-all; overflow-wrap: anywhere; }
+    .summary { margin: 10px 0 14px; font-size: 15px; line-height: 1.75; color: #555; word-break: keep-all; overflow-wrap: anywhere; }
+    .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+    .source { overflow-wrap: anywhere; }
+    time { white-space: nowrap; }
+    footer { width: min(100% - 48px, 840px); margin: 0 auto 40px; color: var(--muted); font-size: 11px; line-height: 1.6; text-align: left; }
+    .points, .comments { display: inline-flex; align-items: center; gap: 5px; }
+    .points svg, .comments svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .points svg { width: 10px; height: 10px; }
+    .thumb { float: right; width: 200px; margin: 3px 0 16px 24px; aspect-ratio: 2 / 1; overflow: hidden; border-radius: 2px; }
+    .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .thumb[hidden] { display: none; }
+    .empty { padding: 40px 0; color: var(--muted); font-size: 13px; }
+    @media (max-width: 640px) {
+      main, footer { width: calc(100% - 40px); }
+      main { margin-top: 8px; }
+      .story { padding: 20px 0 28px; }
+      .story article { display: flow-root; }
+      h2 { font-size: 17px; }
+      .thumb { float: right; width: 160px; max-width: 48%; margin: 10px 0 10px 16px; }
+      .meta { clear: both; gap: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#feed">뉴스 목록으로 건너뛰기</a>
+  <main id="feed" aria-label="뉴스 목록">
+    <ol class="feed">$stories</ol>
+    $empty
+  </main>
+  <footer lang="en">Published $published</footer>
+  <script>
+    const dateFormat = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    });
+    document.querySelectorAll('time[datetime]').forEach(function (time) {
+      const date = new Date(time.dateTime);
+      if (!Number.isNaN(date.getTime())) {
+        const parts = Object.fromEntries(dateFormat.formatToParts(date).map(function (part) {
+          return [part.type, part.value];
+        }));
+        time.textContent = parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute;
+      }
+    });
+    document.querySelectorAll('.thumb img').forEach(function (img) {
+      function fallback() { img.parentElement.hidden = true; }
+      img.addEventListener('error', fallback);
+      if (img.complete && !img.naturalWidth) fallback();
+    });
+  </script>
+</body>
+</html>
