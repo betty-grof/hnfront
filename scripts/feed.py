@@ -756,11 +756,16 @@ def push_preflight():
     return branch
 
 
-def commit_and_push(branch):
+def distribution_commit_message(published_at):
+    instant = datetime.fromisoformat(published_at).astimezone(timezone.utc)
+    return f"dist: {instant.isoformat(timespec='seconds')}"
+
+
+def commit_and_push(branch, published_at):
     git("add", "--", FEED_FILE)
 
     if git("diff", "--cached", "--name-only"):
-        git("commit", "-m", "chore: update Korean HN feed")
+        git("commit", "-m", distribution_commit_message(published_at))
 
     git("push", "origin", f"HEAD:refs/heads/{branch}")
 
@@ -807,7 +812,7 @@ def publish(push=False):
     write_json(ROOT / RUN_FILE, run)
 
     if push:
-        commit_and_push(branch)
+        commit_and_push(branch, state["updated_at"])
 
     return {
         "articles": len(state["order"]),

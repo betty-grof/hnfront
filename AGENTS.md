@@ -10,6 +10,9 @@ existing data, HTML, or README. No planning, browsing, tests, installs, or subag
    Failed sources are not retried. Never refetch them or rerun preparation for more text.
 3. Run `python3 scripts/feed.py publish --push`. It commits only `data/feed.json`.
    GitHub Actions renders and deploys the page. Never generate or commit HTML.
+   The tool generates `dist: 2026-11-11T14:56:12+00:00` from the feed update
+   timestamp in UTC (ISO 8601, seconds, explicit offset).
+   Never compose a commit message or create additional commits.
 4. Report counts only. On validation errors, fix only the identified rows.
    On authentication or push conflicts, report and stop. Never force-push,
    reset, or modify code. Do not repeat output files in chat.
