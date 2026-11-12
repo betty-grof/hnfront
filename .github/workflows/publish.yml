@@ -6,12 +6,16 @@ on:
       - 'data/feed.json'
       - 'templates/index.html'
       - 'scripts/feed.py'
+      - 'scripts/llm.py'
+      - 'AGENTS.md'
       - 'favicon.svg'
       - '.github/workflows/publish.yml'
+  schedule:
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -23,7 +27,7 @@ jobs:
   publish:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -34,6 +38,21 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Configure feed publisher
+        if: github.event_name != 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          gh auth setup-git
+      - name: Translate new stories
+        if: github.event_name != 'push'
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/feed.py update --push
       - uses: actions/configure-pages@v5
       - name: Render static page
         run: python3 scripts/feed.py render

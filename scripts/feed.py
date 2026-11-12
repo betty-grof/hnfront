@@ -18,6 +18,8 @@ from string import Template
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
+from llm import generate_translations
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RSS_URL = "https://hnrss.org/frontpage?count=30"
@@ -464,15 +466,12 @@ def normalize_translation(text):
     return re.sub(r"\s*,\s*", ", ", compact_text(text)).strip()
 
 
-def validate_text(value, *, label, limit, allow_empty=False, korean=False):
+def validate_text(value, *, label, limit, allow_empty=False):
     require(isinstance(value, str), f"{label} must be text")
     require(len(value) <= limit, f"{label} must be at most {limit} characters")
 
     if not allow_empty:
         require(value.strip(), f"{label} must not be empty")
-
-    if korean and value:
-        require(re.search("[가-힣]", value), f"{label} must be Korean")
 
 
 def validate_translation_style(title, summary):
@@ -495,13 +494,13 @@ def validate_source_summary(summary, source_status):
 
 def validate_translation(title, summary, source_status):
     validate_text(title, label="Title", limit=120)
-    validate_text(summary, label="Summary", limit=400, allow_empty=True, korean=True)
+    validate_text(summary, label="Summary", limit=400, allow_empty=True)
 
     title = normalize_translation(title)
     summary = normalize_translation(summary)
 
     validate_text(title, label="Title", limit=120)
-    validate_text(summary, label="Summary", limit=400, allow_empty=True, korean=True)
+    validate_text(summary, label="Summary", limit=400, allow_empty=True)
     validate_translation_style(title, summary)
     validate_source_summary(summary, source_status)
 
@@ -831,6 +830,22 @@ def prepare(rss_file=None, source_chars=2400, refresh=False):
     }
 
 
+def translate():
+    run = read_json(ROOT / RUN_FILE)
+    result = read_json(ROOT / TRANSLATIONS_FILE)
+
+    if run["pending"] and not result["items"]:
+        input_text = (ROOT / INPUT_FILE).read_text(encoding="utf-8")
+        generated = generate_translations(input_text, len(run["pending"]))
+        result = {"run": run["id"], **generated}
+
+        write_json(ROOT / TRANSLATIONS_FILE, result)
+
+    translations = validate_summaries(result, run)
+
+    return {"translated": len(translations)}
+
+
 def publish(push=False):
     branch = push_preflight() if push else None
     run = read_json(ROOT / RUN_FILE)
@@ -861,6 +876,16 @@ def publish(push=False):
     }
 
 
+def update(rss_file=None, source_chars=2400, refresh=False, push=False):
+    if push:
+        push_preflight()
+
+    prepare(rss_file=rss_file, source_chars=source_chars, refresh=refresh)
+    translate()
+
+    return publish(push=push)
+
+
 def build_site():
     site = ROOT / SITE_DIRECTORY
     feed = read_json(ROOT / FEED_FILE)
@@ -875,9 +900,12 @@ def build_site():
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Collect HN articles, publish translation data, or build the static page.",
+        description="Update HN translations with an LLM or build the static page.",
     )
-    parser.add_argument("command", choices=["prepare", "publish", "render"])
+    parser.add_argument(
+        "command",
+        choices=["update", "prepare", "translate", "publish", "render"],
+    )
     parser.add_argument("--rss-file", help="Collect from a saved RSS response")
     parser.add_argument(
         "--source-chars",
@@ -892,15 +920,17 @@ def parse_arguments():
     if not 400 <= arguments.source_chars <= 8000:
         parser.error("--source-chars must be between 400 and 8000")
 
-    if arguments.push and arguments.command != "publish":
-        parser.error("--push is only valid with publish")
+    if arguments.push and arguments.command not in {"update", "publish"}:
+        parser.error("--push is only valid with update or publish")
 
     return arguments
 
 
 def report_result(command, result):
     output_fields = {
+        "update": ("articles", "translated"),
         "prepare": ("run", "pending"),
+        "translate": ("translated",),
         "publish": ("articles", "translated"),
     }
     fields = output_fields.get(command)
@@ -929,12 +959,21 @@ def report_error(error):
 def main():
     arguments = parse_arguments()
 
-    if arguments.command == "prepare":
+    if arguments.command == "update":
+        result = update(
+            rss_file=arguments.rss_file,
+            source_chars=arguments.source_chars,
+            refresh=arguments.refresh,
+            push=arguments.push,
+        )
+    elif arguments.command == "prepare":
         result = prepare(
             rss_file=arguments.rss_file,
             source_chars=arguments.source_chars,
             refresh=arguments.refresh,
         )
+    elif arguments.command == "translate":
+        result = translate()
     elif arguments.command == "publish":
         result = publish(push=arguments.push)
     else:
