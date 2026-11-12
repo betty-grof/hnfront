@@ -8,7 +8,7 @@ on:
       - 'scripts/feed.py'
       - 'scripts/llm.py'
       - 'AGENTS.md'
-      - 'favicon.svg'
+      - 'assets/**'
       - '.github/workflows/publish.yml'
   schedule:
     - cron: '0 * * * *'

@@ -7,7 +7,9 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="referrer" content="no-referrer">
   <title>hnfront</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" href="assets/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" sizes="any">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
   <style>
     :root { color-scheme: light; --paper: #fff; --ink: #222; --muted: #888; --accent: #ff6600; }
     * { box-sizing: border-box; }
@@ -25,7 +27,8 @@
     .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 12px; line-height: 1.6; color: var(--muted); }
     .source { overflow-wrap: anywhere; }
     time { white-space: nowrap; }
-    footer { width: min(100% - 48px, 840px); margin: 0 auto 40px; color: var(--muted); font-size: 11px; line-height: 1.6; text-align: left; }
+    footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; width: min(100% - 48px, 840px); margin: 0 auto 40px; color: var(--muted); font-size: 11px; line-height: 1.6; text-align: left; }
+    footer nav { display: flex; flex-wrap: wrap; gap: 12px; }
     .points, .comments { display: inline-flex; align-items: center; gap: 5px; }
     .points svg, .comments svg { width: 14px; height: 14px; flex-shrink: 0; }
     .points svg { width: 10px; height: 10px; }
@@ -50,7 +53,13 @@
     <ol class="feed">$stories</ol>
     $empty
   </main>
-  <footer lang="en">Published $published</footer>
+  <footer lang="en">
+    <span>Published $published</span>
+    <nav aria-label="Links">
+      <a href="https://github.com/parksb/hnfront" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <span>Feeds from <a href="https://hnrss.org/frontpage" target="_blank" rel="noopener noreferrer">hnrss</a></span>
+    </nav>
+  </footer>
   <script>
     const dateFormat = new Intl.DateTimeFormat('en-CA', {
       year: 'numeric', month: '2-digit', day: '2-digit',

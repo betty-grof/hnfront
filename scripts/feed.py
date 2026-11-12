@@ -14,6 +14,7 @@ from html import escape
 from html.parser import HTMLParser
 from io import BytesIO
 from pathlib import Path
+from shutil import copytree
 from string import Template
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -890,10 +891,10 @@ def build_site():
     site = ROOT / SITE_DIRECTORY
     feed = read_json(ROOT / FEED_FILE)
     page = render(feed, utc_now())
-    favicon = (ROOT / "favicon.svg").read_text(encoding="utf-8")
 
     write_text(site / "index.html", page)
-    write_text(site / "favicon.svg", favicon)
+
+    copytree(ROOT / "assets", site / "assets", dirs_exist_ok=True)
 
     return {"site": SITE_DIRECTORY}
 
