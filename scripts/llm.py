@@ -5,7 +5,6 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-
 ROOT = Path(__file__).resolve().parents[1]
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
@@ -120,7 +119,9 @@ def translation_result(response):
     candidates = response.get("candidates", [])
 
     if len(candidates) != 1 or candidates[0].get("finishReason") != "STOP":
-        raise ValueError("LLM did not complete the translations; previous feed preserved")
+        raise ValueError(
+            "LLM did not complete the translations; previous feed preserved"
+        )
 
     parts = candidates[0].get("content", {}).get("parts", [])
     text = "".join(part.get("text", "") for part in parts if not part.get("thought"))

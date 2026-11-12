@@ -21,7 +21,6 @@ from urllib.request import Request, urlopen
 
 from llm import generate_translations
 
-
 ROOT = Path(__file__).resolve().parents[1]
 RSS_URL = "https://hnrss.org/frontpage?count=30"
 HN_HOST = "news.ycombinator.com"
@@ -33,14 +32,16 @@ ERROR_FILE = ".cache/error.log"
 SITE_DIRECTORY = ".cache/site"
 MAX_RESPONSE_BYTES = 2_000_000
 HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
-PUNCTUATION_REPLACEMENTS = str.maketrans({
-    "·": ", ",
-    "•": ", ",
-    "‧": ", ",
-    "・": ", ",
-    "—": ", ",
-    "–": "-",
-})
+PUNCTUATION_REPLACEMENTS = str.maketrans(
+    {
+        "·": ", ",
+        "•": ", ",
+        "‧": ", ",
+        "・": ", ",
+        "—": ", ",
+        "–": "-",
+    }
+)
 
 
 def require(condition, message):
@@ -94,9 +95,7 @@ def utc_now():
 def web_url(value):
     parsed = urlparse(value)
     valid = (
-        parsed.scheme in {"https", "http"}
-        and parsed.hostname
-        and not parsed.username
+        parsed.scheme in {"https", "http"} and parsed.hostname and not parsed.username
     )
 
     require(valid, f"Invalid web URL: {value!r}")
@@ -195,12 +194,31 @@ def fetch_html(url):
 
 class ArticleParser(HTMLParser):
     SKIPPED_TAGS = {
-        "script", "style", "nav", "footer", "header",
-        "noscript", "svg", "form", "aside",
+        "script",
+        "style",
+        "nav",
+        "footer",
+        "header",
+        "noscript",
+        "svg",
+        "form",
+        "aside",
     }
     VOID_TAGS = {
-        "area", "base", "br", "col", "embed", "hr", "img",
-        "input", "link", "meta", "param", "source", "track", "wbr",
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
     }
 
     def __init__(self):
@@ -342,7 +360,9 @@ def parse_rss(body):
 
     articles = [parse_rss_item(node) for node in channel.findall("item")]
     articles = unique_by(articles, lambda article: article["id"])
-    articles = unique_by(articles, lambda article: canonical_article_url(article["url"]))
+    articles = unique_by(
+        articles, lambda article: canonical_article_url(article["url"])
+    )
 
     require(articles, "RSS is empty; keeping the previous feed")
     return articles
@@ -481,14 +501,18 @@ def validate_translation_style(title, summary):
         "Write mathematical notation naturally in Korean instead of using dot symbols",
     )
     require(
-        not re.search(r"(?:습니다|입니다)[.!?]?(?:\s|$)|소개하는 페이지|이 글은", summary),
+        not re.search(
+            r"(?:습니다|입니다)[.!?]?(?:\s|$)|소개하는 페이지|이 글은", summary
+        ),
         "Summarize facts directly using 한다/이다, without article introductions",
     )
 
 
 def validate_source_summary(summary, source_status):
     if source_status == "unavailable":
-        require(not summary, "No source text; translate the title and leave summary empty")
+        require(
+            not summary, "No source text; translate the title and leave summary empty"
+        )
     elif source_status is not None:
         require(summary.strip(), "Source text is available; summary is required")
 
@@ -717,7 +741,9 @@ def render_comments(article):
 
 def render_metadata(article):
     domain = urlparse(article["url"]).hostname.removeprefix("www.")
-    published = time_html(article["published_at"]) if article.get("published_at") else ""
+    published = (
+        time_html(article["published_at"]) if article.get("published_at") else ""
+    )
     parts = [
         html_tag("span", escape(domain), class_="source"),
         render_points(article),
@@ -814,7 +840,11 @@ def prepare(rss_file=None, source_chars=2400, refresh=False):
     existing = None if refresh else resumable_run(base)
 
     if existing is not None:
-        return {"run": existing["id"], "pending": len(existing["pending"]), "resumed": True}
+        return {
+            "run": existing["id"],
+            "pending": len(existing["pending"]),
+            "resumed": True,
+        }
 
     cache = index_translations(read_json(ROOT / FEED_FILE)["stories"])
     articles = collect_articles(rss_file, cache)
@@ -914,8 +944,12 @@ def parse_arguments():
         default=2400,
         help="Maximum source characters per new article",
     )
-    parser.add_argument("--refresh", action="store_true", help="Replace an unfinished preparation")
-    parser.add_argument("--push", action="store_true", help="Commit and push translation data")
+    parser.add_argument(
+        "--refresh", action="store_true", help="Replace an unfinished preparation"
+    )
+    parser.add_argument(
+        "--push", action="store_true", help="Commit and push translation data"
+    )
     arguments = parser.parse_args()
 
     if not 400 <= arguments.source_chars <= 8000:
