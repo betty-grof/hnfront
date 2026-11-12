@@ -6,7 +6,11 @@ Return JSON only: `{"items":[["id","Korean title","Korean summary"]]}`.
 Return one row per input, with its ID unchanged.
 
 - Use only supplied facts; attribute claims. Use ordinary Korean words and correct spacing.
-- Title: <=120 characters. Keep proper names and the literal prefixes `Show HN:` / `Ask HN:`;
+- For names and technical terms, use an established Korean form only when certain;
+  otherwise keep the source spelling or a source-provided acronym. Never invent names,
+  mix partial translations with transliterations, or coin unfamiliar Korean words.
+  Example: retain ICRAR when unsure of the institution's Korean name.
+- Title: <=120 characters. Preserve the literal prefixes `Show HN:` / `Ask HN:`;
   translate everything after them.
   Example: `Ask HN: What are you working on?` → `Ask HN: 어떤 작업을 하고 있나요?`.
 - Summary: 1–3 sentences, 80–200 characters (maximum 400). State the main result first
@@ -20,4 +24,4 @@ Return one row per input, with its ID unchanged.
 - No hype, teasers, rhetorical questions, invitations to read, filler, centered dots, long dashes, or decorative punctuation.
 - Empty excerpt: translate the title and leave summary `""`.
 
-Before returning, check every row against these rules and revise any violations.
+Before returning, check every row against these rules, especially names and unnatural Korean words, and revise any violations.
