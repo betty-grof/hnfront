@@ -59,10 +59,20 @@ def translation_instructions():
 
 def translation_schema(count):
     row = {
-        "type": "ARRAY",
-        "items": {"type": "STRING"},
-        "minItems": 3,
-        "maxItems": 3,
+        "type": "OBJECT",
+        "properties": {
+            "id": {"type": "STRING", "description": "Unchanged input article ID."},
+            "summary_ko": {
+                "type": "STRING",
+                "description": "Article summary written in Korean.",
+            },
+            "title_ko": {
+                "type": "STRING",
+                "description": "Title translated into Korean using the summary's context. Preserve only proper names in their original spelling.",
+            },
+        },
+        "required": ["id", "summary_ko", "title_ko"],
+        "propertyOrdering": ["id", "summary_ko", "title_ko"],
     }
 
     return {
@@ -129,17 +139,34 @@ def translation_result(response):
     text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
     result = json.loads(text)
 
-    if not isinstance(result, dict) or set(result) != {"items"}:
-        raise ValueError("LLM must return {items: [[id, title_ko, summary], ...]}")
+    if (
+        not isinstance(result, dict)
+        or set(result) != {"items"}
+        or not isinstance(result["items"], list)
+    ):
+        raise ValueError("LLM must return an object containing an items array")
 
-    return result
+    rows = []
+
+    for item in result["items"]:
+        if not isinstance(item, dict) or set(item) != {"id", "summary_ko", "title_ko"}:
+            raise ValueError("Each LLM item must contain id, summary_ko, and title_ko")
+
+        rows.append([item["id"], item["title_ko"], item["summary_ko"]])
+
+    return {"items": rows}
 
 
 def generate_translations(input_text, count):
     api_key, model = configuration()
+    request_text = (
+        "Input JSONL:\n"
+        + input_text.rstrip()
+        + "\n\n위 기사의 본문을 한국어로 요약하고, 제목도 한국어로 번역하세요."
+    )
     payload = {
         "systemInstruction": {"parts": [{"text": translation_instructions()}]},
-        "contents": [{"role": "user", "parts": [{"text": input_text}]}],
+        "contents": [{"role": "user", "parts": [{"text": request_text}]}],
         "generationConfig": generation_config(model, count),
     }
     response = generate_content(api_key, model, payload)
