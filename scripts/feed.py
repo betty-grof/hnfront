@@ -164,11 +164,15 @@ def fetch_resource(url, *, accept, timeout, content_types=None):
 
 
 def fetch_rss():
-    body, _, _ = fetch_resource(
-        RSS_URL,
-        accept="application/rss+xml, application/xml",
-        timeout=30,
-    )
+    try:
+        body, _, _ = fetch_resource(
+            RSS_URL,
+            accept="application/rss+xml, application/xml",
+            timeout=30,
+        )
+    except (OSError, ValueError) as error:
+        raise ValueError(f"RSS fetch failed: {error}; no retry") from None
+
     return body
 
 

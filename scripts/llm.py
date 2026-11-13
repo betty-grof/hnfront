@@ -108,6 +108,8 @@ def generate_content(api_key, model, payload):
             body = response.read(2_000_001)
     except HTTPError as error:
         raise ValueError(f"LLM request failed (HTTP {error.code}); no retry") from None
+    except OSError as error:
+        raise ValueError(f"LLM request failed: {error}; no retry") from None
 
     if len(body) > 2_000_000:
         raise ValueError("LLM response exceeds size limit")
