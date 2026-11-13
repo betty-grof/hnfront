@@ -1,13 +1,17 @@
 import json
 import os
 import re
+import sys
 from pathlib import Path
-from urllib.error import HTTPError
+from random import uniform
+from time import sleep
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
+MAX_REQUEST_RETRIES = 3
 
 
 def environment_values(path):
@@ -105,6 +109,47 @@ def generation_config(model, count):
     return settings
 
 
+def retryable_request_error(error):
+    if isinstance(error, HTTPError):
+        return error.code in {408, 429} or 500 <= error.code < 600
+
+    cause = error.reason if isinstance(error, URLError) else error
+    return isinstance(cause, (TimeoutError, ConnectionError))
+
+
+def request_failure(error):
+    if isinstance(error, HTTPError):
+        return f"HTTP {error.code}"
+
+    return str(error)
+
+
+def request_content(request):
+    for attempt in range(MAX_REQUEST_RETRIES + 1):
+        try:
+            with urlopen(request, timeout=180) as response:
+                return response.read(2_000_001)
+        except OSError as error:
+            reason = request_failure(error)
+            retryable = retryable_request_error(error)
+
+            if isinstance(error, HTTPError):
+                error.close()
+
+            if not retryable or attempt == MAX_REQUEST_RETRIES:
+                raise ValueError(
+                    f"LLM request failed (attempts: {attempt + 1}): {reason}"
+                ) from None
+
+        delay = 2 ** (attempt + 1) + uniform(0, 1)
+        print(
+            f"warning: LLM request failed ({reason}); "
+            f"retry {attempt + 1}/{MAX_REQUEST_RETRIES} in {delay:.1f}s",
+            file=sys.stderr,
+        )
+        sleep(delay)
+
+
 def generate_content(api_key, model, payload):
     request = Request(
         f"{API_URL}/{model}:generateContent",
@@ -112,14 +157,7 @@ def generate_content(api_key, model, payload):
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
         method="POST",
     )
-
-    try:
-        with urlopen(request, timeout=180) as response:
-            body = response.read(2_000_001)
-    except HTTPError as error:
-        raise ValueError(f"LLM request failed (HTTP {error.code}); no retry") from None
-    except OSError as error:
-        raise ValueError(f"LLM request failed: {error}; no retry") from None
+    body = request_content(request)
 
     if len(body) > 2_000_000:
         raise ValueError("LLM response exceeds size limit")
