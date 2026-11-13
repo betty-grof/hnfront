@@ -3,10 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="해커뉴스 한국어 요약">
+  <meta name="description" content="Hacker News front-page stories, summarized in Korean">
   <meta name="theme-color" content="#ffffff">
   <meta name="referrer" content="no-referrer">
   <title>hnfront</title>
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="hnfront">
+  <meta property="og:description" content="Hacker News front-page stories, summarized in Korean">
+  <meta property="og:url" content="https://hnfront.parksb.xyz/">
+  <meta property="og:image" content="https://hnfront.parksb.xyz/assets/og.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="assets/favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" sizes="any">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
@@ -23,6 +32,7 @@
     .feed { padding: 0; margin: 0; list-style: none; }
     .story { display: flow-root; padding: 24px 0 32px; }
     h2 { margin: 0; font-size: 18px; line-height: 1.55; font-weight: 600; letter-spacing: -.4px; word-break: keep-all; overflow-wrap: anywhere; }
+    h2 a:visited { color: #555; }
     .summary { margin: 10px 0 14px; font-size: 15px; line-height: 1.75; color: #555; word-break: keep-all; overflow-wrap: anywhere; }
     .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 12px; line-height: 1.6; color: var(--muted); }
     .source { overflow-wrap: anywhere; }
