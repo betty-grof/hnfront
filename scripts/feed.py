@@ -32,16 +32,6 @@ ERROR_FILE = ".cache/error.log"
 SITE_DIRECTORY = ".cache/site"
 MAX_RESPONSE_BYTES = 2_000_000
 HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
-PUNCTUATION_REPLACEMENTS = str.maketrans(
-    {
-        "·": ", ",
-        "•": ", ",
-        "‧": ", ",
-        "・": ", ",
-        "—": ", ",
-        "–": "-",
-    }
-)
 
 
 def require(condition, message):
@@ -482,54 +472,42 @@ def translation_requests(articles, cache, source_chars):
     ]
 
 
-def normalize_translation(text):
-    text = text.translate(PUNCTUATION_REPLACEMENTS)
-    return re.sub(r"\s*,\s*", ", ", compact_text(text)).strip()
-
-
-def validate_text(value, *, label, limit, allow_empty=False):
+def validate_text(value, *, label):
     require(isinstance(value, str), f"{label} must be text")
-    require(len(value) <= limit, f"{label} must be at most {limit} characters")
-
-    if not allow_empty:
-        require(value.strip(), f"{label} must not be empty")
+    require(value.strip(), f"{label} must not be empty")
 
 
-def validate_translation_style(title, summary):
-    require(
-        not re.search(r"[∙⋅]|\\cdot\b", title + summary),
-        "Write mathematical notation naturally in Korean instead of using dot symbols",
-    )
-    require(
-        not re.search(
-            r"(?:습니다|입니다)[.!?]?(?:\s|$)|소개하는 페이지|이 글은", summary
-        ),
-        "Summarize facts directly using 한다/이다, without article introductions",
-    )
+def normalized_translation_text(value, *, label):
+    validate_text(value, label=label)
+    return compact_text(value)
 
 
-def validate_source_summary(summary, source_status):
+def translation_title(title, original):
+    try:
+        title = normalized_translation_text(title, label="Title")
+    except ValueError:
+        return original
+
+    return title
+
+
+def translation_summary(summary, source_status):
     if source_status == "unavailable":
-        require(
-            not summary, "No source text; translate the title and leave summary empty"
-        )
-    elif source_status is not None:
-        require(summary.strip(), "Source text is available; summary is required")
+        return ""
+
+    try:
+        summary = normalized_translation_text(summary, label="Summary")
+    except ValueError:
+        return ""
+
+    return summary
 
 
-def validate_translation(title, summary, source_status):
-    validate_text(title, label="Title", limit=120)
-    validate_text(summary, label="Summary", limit=400, allow_empty=True)
-
-    title = normalize_translation(title)
-    summary = normalize_translation(summary)
-
-    validate_text(title, label="Title", limit=120)
-    validate_text(summary, label="Summary", limit=400, allow_empty=True)
-    validate_translation_style(title, summary)
-    validate_source_summary(summary, source_status)
-
-    return {"title_ko": title, "summary": summary}
+def validate_translation(title, summary, article):
+    return {
+        "title_ko": translation_title(title, article["title"]),
+        "summary": translation_summary(summary, article.get("source_status")),
+    }
 
 
 def validate_translation_ids(translations, expected_ids):
@@ -564,12 +542,8 @@ def validate_summaries(result, run):
         require(isinstance(item_id, str), "Translation ID must be a string")
         require(item_id not in translations, f"Duplicate translation ID: {item_id}")
 
-        source_status = sources.get(item_id, {}).get("source_status")
-
-        try:
-            translations[item_id] = validate_translation(title, summary, source_status)
-        except ValueError as error:
-            raise ValueError(f"{item_id}: {error}") from error
+        require(item_id in sources, f"Unexpected translation ID: {item_id}")
+        translations[item_id] = validate_translation(title, summary, sources[item_id])
 
     validate_translation_ids(translations, run["pending"])
     return translations
