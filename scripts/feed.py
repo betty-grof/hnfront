@@ -16,6 +16,7 @@ from io import BytesIO
 from pathlib import Path
 from shutil import copytree
 from string import Template
+from urllib.error import URLError
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
@@ -163,17 +164,27 @@ def fetch_resource(url, *, accept, timeout, content_types=None):
         return body, charset, response.url
 
 
-def fetch_rss():
-    try:
-        body, _, _ = fetch_resource(
-            RSS_URL,
-            accept="application/rss+xml, application/xml",
-            timeout=30,
-        )
-    except (OSError, ValueError) as error:
-        raise ValueError(f"RSS fetch failed: {error}; no retry") from None
+def is_timeout(error):
+    cause = error.reason if isinstance(error, URLError) else error
+    return isinstance(cause, TimeoutError)
 
-    return body
+
+def fetch_rss():
+    for attempt in range(2):
+        try:
+            body, _, _ = fetch_resource(
+                RSS_URL,
+                accept="application/rss+xml, application/xml",
+                timeout=30,
+            )
+            return body
+        except (OSError, ValueError) as error:
+            if attempt == 0 and is_timeout(error):
+                continue
+
+            raise ValueError(
+                f"RSS fetch failed (attempts: {attempt + 1}): {error}"
+            ) from None
 
 
 def fetch_html(url):
