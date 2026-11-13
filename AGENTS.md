@@ -6,12 +6,13 @@ Return JSON only: `{"items":[["id","Korean title","Korean summary"]]}`.
 Return one row per input, with its ID unchanged.
 
 - Use only supplied facts; attribute claims. Use ordinary Korean words and correct spacing.
-- For names and technical terms, use an established Korean form only when certain;
-  otherwise keep the source spelling or a source-provided acronym. Never invent names,
-  mix partial translations with transliterations, or coin unfamiliar Korean words.
-  Example: retain ICRAR when unsure of the institution's Korean name.
+- For proper names and technical terms in titles and summaries, follow common Korean usage,
+  including original spellings where those are standard. Use Korean forms only when widely established.
+  Keep unfamiliar names in their original spelling rather than transliterating them.
+  When unsure, keep the source spelling or a source-provided acronym.
+  Never invent names, mix partial translations with transliterations, or coin unfamiliar Korean words.
 - Title: <=120 characters. Preserve the literal prefixes `Show HN:` / `Ask HN:`;
-  translate everything after them.
+  translate the text after them while following the naming rules above.
   Example: `Ask HN: What are you working on?` → `Ask HN: 어떤 작업을 하고 있나요?`.
 - Summary: 1–3 sentences, 80–200 characters (maximum 400). State the main result first
   so the title and first sentence convey the gist. Use dry 한다/이다 endings.
