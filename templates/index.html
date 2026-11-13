@@ -27,7 +27,7 @@
     .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 12px; line-height: 1.6; color: var(--muted); }
     .source { overflow-wrap: anywhere; }
     time { white-space: nowrap; }
-    footer { padding: 24px 0; background: var(--accent); color: var(--ink); font-size: 11px; line-height: 1.6; text-align: left; }
+    footer { padding: 24px 0; background: var(--accent); color: var(--paper); font-size: 11px; line-height: 1.6; text-align: left; }
     .footer-inner { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; width: min(100% - 48px, 840px); margin: 0 auto; }
     footer a:hover { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
     footer a:focus-visible { outline-color: currentColor; }
@@ -60,6 +60,7 @@
     <div class="footer-inner">
       <span>Published $published</span>
       <nav aria-label="Links">
+        <a href="https://news.ycombinator.com/" target="_blank" rel="noopener noreferrer">news.ycombinator.com</a>
         <a href="https://github.com/parksb/hnfront" target="_blank" rel="noopener noreferrer">github.com/hnfront</a>
       </nav>
     </div>
