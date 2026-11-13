@@ -5,10 +5,8 @@ import os
 import re
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from hashlib import sha256
 from html import escape
 from html.parser import HTMLParser
@@ -16,14 +14,13 @@ from io import BytesIO
 from pathlib import Path
 from shutil import copytree
 from string import Template
-from urllib.error import URLError
-from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from llm import generate_translations
 
 ROOT = Path(__file__).resolve().parents[1]
-RSS_URL = "https://hnrss.org/frontpage?count=30"
+HN_API_URL = "https://hacker-news.firebaseio.com/v0"
 HN_HOST = "news.ycombinator.com"
 FEED_FILE = "data/feed.json"
 RUN_FILE = ".cache/run.json"
@@ -145,7 +142,7 @@ def fetch_resource(url, *, accept, timeout, content_types=None):
     request = Request(
         web_url(url),
         headers={
-            "User-Agent": "hnfront/1.0 (+https://hnrss.org/)",
+            "User-Agent": "hnfront/1.0 (+https://github.com/parksb/hnfront)",
             "Accept": accept,
         },
     )
@@ -164,27 +161,16 @@ def fetch_resource(url, *, accept, timeout, content_types=None):
         return body, charset, response.url
 
 
-def is_timeout(error):
-    cause = error.reason if isinstance(error, URLError) else error
-    return isinstance(cause, TimeoutError)
-
-
-def fetch_rss():
-    for attempt in range(2):
-        try:
-            body, _, _ = fetch_resource(
-                RSS_URL,
-                accept="application/rss+xml, application/xml",
-                timeout=30,
-            )
-            return body
-        except (OSError, ValueError) as error:
-            if attempt == 0 and is_timeout(error):
-                continue
-
-            raise ValueError(
-                f"RSS fetch failed (attempts: {attempt + 1}): {error}"
-            ) from None
+def fetch_hn_json(path):
+    try:
+        body, _, _ = fetch_resource(
+            f"{HN_API_URL}/{path}.json",
+            accept="application/json",
+            timeout=12,
+        )
+        return json.loads(body)
+    except (OSError, ValueError) as error:
+        raise ValueError(f"HN API request failed ({path}): {error}") from None
 
 
 def fetch_html(url):
@@ -315,61 +301,56 @@ def html_text(body):
     return " ".join(parse_html(body).text)
 
 
-def hn_item_id(url):
-    parsed = urlparse(url)
-    item_id = parse_qs(parsed.query).get("id", [""])[0]
+def parse_hn_item(item, item_id):
+    if item is None:
+        return None
 
-    require(
-        parsed.hostname == HN_HOST and item_id.isdigit(),
-        "RSS item has an invalid HN comments URL",
-    )
-    return item_id
+    require(isinstance(item, dict), f"HN item {item_id} must be an object")
 
+    if item.get("deleted") or item.get("dead"):
+        return None
 
-def extract_count(text, label):
-    match = re.search(re.escape(label) + r"\s*(\d+)", text)
-    return int(match.group(1)) if match else 0
-
-
-def rss_post_text(description):
-    metadata_start = r"<(?:hr\b|p>\s*(?:Article|Comments) URL:)"
-    body = re.split(metadata_start, description, maxsplit=1, flags=re.I)[0]
-    return html_text(body)[:16000]
-
-
-def parse_rss_item(node):
-    comments_url = node.findtext("comments") or node.findtext("guid") or ""
-    item_id = hn_item_id(comments_url)
-    title = (node.findtext("title") or "").strip()
-    description = node.findtext("description") or ""
-    metadata = html_text(description)
-    published_at = parsedate_to_datetime(node.findtext("pubDate"))
-
-    require(title, "RSS item has no title")
+    require(item.get("id") == item_id, "HN API returned a mismatched item ID")
+    title = html_text(item.get("title", ""))
+    require(title, f"HN item {item_id} has no title")
+    comments_url = f"https://{HN_HOST}/item?id={item_id}"
 
     return {
-        "id": item_id,
+        "id": str(item_id),
         "title": title,
-        "url": web_url(node.findtext("link") or comments_url),
-        "comments_url": f"https://{HN_HOST}/item?id={item_id}",
-        "points": extract_count(metadata, "Points:"),
-        "comments": extract_count(metadata, "# Comments:"),
-        "published_at": published_at.astimezone(timezone.utc).isoformat(),
-        "rss_text": rss_post_text(description),
+        "url": web_url(item.get("url") or comments_url),
+        "comments_url": comments_url,
+        "points": item.get("score", 0),
+        "comments": item.get("descendants", 0),
+        "published_at": datetime.fromtimestamp(item["time"], timezone.utc).isoformat(),
+        "post_text": html_text(item.get("text", ""))[:16000],
     }
 
 
-def parse_rss(body):
-    channel = ET.fromstring(body).find("channel")
-    require(channel is not None, "RSS channel is missing")
+def fetch_hn_article(item_id):
+    item = fetch_hn_json(f"item/{item_id}")
+    return parse_hn_item(item, item_id)
 
-    articles = [parse_rss_item(node) for node in channel.findall("item")]
+
+def fetch_front_page():
+    item_ids = fetch_hn_json("topstories")
+    require(
+        isinstance(item_ids, list)
+        and item_ids
+        and all(type(item_id) is int and item_id > 0 for item_id in item_ids),
+        "HN API returned an invalid top stories list",
+    )
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        items = list(pool.map(fetch_hn_article, item_ids[:30]))
+
+    articles = [item for item in items if item is not None]
     articles = unique_by(articles, lambda article: article["id"])
     articles = unique_by(
         articles, lambda article: canonical_article_url(article["url"])
     )
 
-    require(articles, "RSS is empty; keeping the previous feed")
+    require(articles, "HN front page is empty; keeping the previous feed")
     return articles
 
 
@@ -401,7 +382,7 @@ def index_translations(stories):
 
 
 def article_metadata(article):
-    source_fields = {"rss_text", "source_text"}
+    source_fields = {"post_text", "source_text"}
     return {key: value for key, value in article.items() if key not in source_fields}
 
 
@@ -443,18 +424,18 @@ def fetch_article_source(url, previous_thumbnail):
 
 
 def collect_article_source(article, previous_thumbnail):
-    rss_text = article["rss_text"]
+    post_text = article["post_text"]
 
-    if is_hn_url(article["url"]) and rss_text:
-        return source_data("rss", rss_text, previous_thumbnail)
+    if is_hn_url(article["url"]) and post_text:
+        return source_data("hn", post_text, previous_thumbnail)
 
     try:
         source = fetch_article_source(article["url"], previous_thumbnail)
     except Exception:
         source = source_data("unavailable", thumbnail=previous_thumbnail)
 
-    if not source["source_text"] and rss_text:
-        return source_data("rss", rss_text, source["thumbnail"])
+    if not source["source_text"] and post_text:
+        return source_data("hn", post_text, source["thumbnail"])
 
     return source
 
@@ -471,9 +452,8 @@ def enrich(article, cache):
     return {**metadata, **source}
 
 
-def collect_articles(rss_file, cache):
-    body = Path(rss_file).read_bytes() if rss_file else fetch_rss()
-    articles = parse_rss(body)
+def collect_articles(cache):
+    articles = fetch_front_page()
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         return list(pool.map(lambda article: enrich(article, cache), articles))
@@ -824,7 +804,7 @@ def commit_and_push(branch, published_at):
     git("push", "origin", f"HEAD:refs/heads/{branch}")
 
 
-def prepare(rss_file=None, source_chars=2400, refresh=False):
+def prepare(source_chars=2400, refresh=False):
     base = feed_fingerprint()
     existing = None if refresh else resumable_run(base)
 
@@ -836,7 +816,7 @@ def prepare(rss_file=None, source_chars=2400, refresh=False):
         }
 
     cache = index_translations(read_json(ROOT / FEED_FILE)["stories"])
-    articles = collect_articles(rss_file, cache)
+    articles = collect_articles(cache)
     requests = translation_requests(articles, cache, source_chars)
     input_text = json_lines(requests)
     run = create_run(base, articles, requests, input_text)
@@ -896,11 +876,11 @@ def publish(push=False):
     }
 
 
-def update(rss_file=None, source_chars=2400, refresh=False, push=False):
+def update(source_chars=2400, refresh=False, push=False):
     if push:
         push_preflight()
 
-    prepare(rss_file=rss_file, source_chars=source_chars, refresh=refresh)
+    prepare(source_chars=source_chars, refresh=refresh)
     translate()
 
     return publish(push=push)
@@ -926,7 +906,6 @@ def parse_arguments():
         "command",
         choices=["update", "prepare", "translate", "publish", "render"],
     )
-    parser.add_argument("--rss-file", help="Collect from a saved RSS response")
     parser.add_argument(
         "--source-chars",
         type=int,
@@ -985,14 +964,12 @@ def main():
 
     if arguments.command == "update":
         result = update(
-            rss_file=arguments.rss_file,
             source_chars=arguments.source_chars,
             refresh=arguments.refresh,
             push=arguments.push,
         )
     elif arguments.command == "prepare":
         result = prepare(
-            rss_file=arguments.rss_file,
             source_chars=arguments.source_chars,
             refresh=arguments.refresh,
         )

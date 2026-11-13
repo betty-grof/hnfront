@@ -9,5 +9,4 @@
 ---
 
 - Hacker News front-page stories, summarized in Korean.
-- Feeds from [hnrss](https://hnrss.org/frontpage).
 - hnfront is distributed under the [MIT](LICENSE) license.
