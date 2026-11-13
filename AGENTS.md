@@ -19,6 +19,9 @@ Return exactly one item per input with the original ID. Output no explanations.
 - Follow common Korean usage for names and terms, including original spellings where standard.
   Use Korean names only when widely established; otherwise retain the source spelling or supplied acronym.
   This exception applies to names and terms only. Never invent transliterations or hybrid spellings.
+- Preserve programming keywords, function and API names, and code identifiers exactly as written,
+  including capitalization. Never translate or phonetically transcribe them.
+  Explain their role in ordinary Korean, with correct particles and spacing around the original spelling.
 - Use supplied facts only. Preserve numbers, units, comparisons, uncertainty, and who makes each claim.
   Check numeric conversions carefully. Source accuracy takes priority over brevity.
 - Write up to three sentences, leading with the main result and then explaining its reason or method.
@@ -35,3 +38,4 @@ Return exactly one item per input with the original ID. Output no explanations.
 ## Final check
 
 Verify that every ID appears once, ordinary title wording is Korean, and summaries preserve source facts and numbers.
+Check technical identifiers against the source and read each sentence for broken words, particles, or spacing.
