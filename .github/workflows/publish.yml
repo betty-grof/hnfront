@@ -24,13 +24,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -59,6 +56,39 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: .cache/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy_retry_1.outputs.page_url || steps.deploy_retry_2.outputs.page_url || steps.deploy_retry_3.outputs.page_url }}
+    steps:
       - name: Deploy
         id: deploy
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+      - name: Wait before deployment retry 1
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 5
+      - name: Retry deployment 1
+        id: deploy_retry_1
+        if: steps.deploy.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+      - name: Wait before deployment retry 2
+        if: steps.deploy_retry_1.outcome == 'failure'
+        run: sleep 10
+      - name: Retry deployment 2
+        id: deploy_retry_2
+        if: steps.deploy_retry_1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+      - name: Wait before deployment retry 3
+        if: steps.deploy_retry_2.outcome == 'failure'
+        run: sleep 20
+      - name: Retry deployment 3
+        id: deploy_retry_3
+        if: steps.deploy_retry_2.outcome == 'failure'
         uses: actions/deploy-pages@v5
