@@ -71,7 +71,7 @@
       <span>Published $published</span>
       <nav aria-label="Links">
         <a href="https://news.ycombinator.com/" target="_blank" rel="noopener noreferrer">news.ycombinator.com</a>
-        <a href="https://github.com/parksb/hnfront" target="_blank" rel="noopener noreferrer">github.com/hnfront</a>
+        <a href="https://github.com/parksb/hnfront" target="_blank" rel="noopener noreferrer">github.com/parksb/hnfront</a>
       </nav>
     </div>
   </footer>
@@ -80,15 +80,58 @@
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
     });
+    const relativeFormat = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
+
+    function timezoneOffset(date) {
+      const minutes = -date.getTimezoneOffset();
+      const sign = minutes >= 0 ? '+' : '-';
+      const hours = String(Math.floor(Math.abs(minutes) / 60)).padStart(2, '0');
+      const remainder = String(Math.abs(minutes) % 60).padStart(2, '0');
+      return 'UTC' + sign + hours + ':' + remainder;
+    }
+
+    function absoluteTime(date) {
+      const parts = Object.fromEntries(dateFormat.formatToParts(date).map(function (part) {
+        return [part.type, part.value];
+      }));
+      return parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute + ' ' + timezoneOffset(date);
+    }
+
+    function relativeTime(date, now) {
+      const elapsed = (date.getTime() - now) / 1000;
+      const units = [['day', 86400], ['hour', 3600], ['minute', 60], ['second', 1]];
+
+      for (const [unit, seconds] of units) {
+        if (Math.abs(elapsed) >= seconds) {
+          return relativeFormat.format(Math.trunc(elapsed / seconds), unit);
+        }
+      }
+      return 'just now';
+    }
+
+    const timestamps = [];
     document.querySelectorAll('time[datetime]').forEach(function (time) {
       const date = new Date(time.dateTime);
-      if (!Number.isNaN(date.getTime())) {
-        const parts = Object.fromEntries(dateFormat.formatToParts(date).map(function (part) {
-          return [part.type, part.value];
-        }));
-        time.textContent = parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute;
-      }
+      if (Number.isNaN(date.getTime())) return;
+
+      time.title = absoluteTime(date);
+      timestamps.push({ element: time, date: date });
     });
+
+    function updateRelativeTimes() {
+      const now = Date.now();
+      timestamps.forEach(function (time) {
+        const text = relativeTime(time.date, now);
+        if (time.element.textContent !== text) time.element.textContent = text;
+      });
+    }
+
+    updateRelativeTimes();
+    setInterval(updateRelativeTimes, 1000);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) updateRelativeTimes();
+    });
+
     document.querySelectorAll('.thumb img').forEach(function (img) {
       function fallback() { img.parentElement.hidden = true; }
       img.addEventListener('error', fallback);
