@@ -61,11 +61,10 @@ def translation_instructions():
     return instructions
 
 
-def translation_schema(count):
+def translation_schema(item_ids):
     row = {
         "type": "OBJECT",
         "properties": {
-            "id": {"type": "STRING", "description": "Unchanged input article ID."},
             "summary_ko": {
                 "type": "STRING",
                 "description": "Article summary written in Korean.",
@@ -75,30 +74,30 @@ def translation_schema(count):
                 "description": "Title translated into Korean using the summary's context. Preserve only proper names in their original spelling.",
             },
         },
-        "required": ["id", "summary_ko", "title_ko"],
-        "propertyOrdering": ["id", "summary_ko", "title_ko"],
+        "required": ["summary_ko", "title_ko"],
+        "propertyOrdering": ["summary_ko", "title_ko"],
     }
 
     return {
         "type": "OBJECT",
         "properties": {
             "items": {
-                "type": "ARRAY",
-                "items": row,
-                "minItems": count,
-                "maxItems": count,
+                "type": "OBJECT",
+                "properties": {item_id: row for item_id in item_ids},
+                "required": item_ids,
+                "propertyOrdering": item_ids,
             },
         },
         "required": ["items"],
     }
 
 
-def generation_config(model, count):
+def generation_config(model, item_ids):
     settings = {
         "temperature": 0.2,
-        "maxOutputTokens": min(16384, max(1024, count * 512)),
+        "maxOutputTokens": min(16384, max(1024, len(item_ids) * 512)),
         "responseMimeType": "application/json",
-        "responseSchema": translation_schema(count),
+        "responseSchema": translation_schema(item_ids),
     }
 
     if model.startswith("gemini-3"):
@@ -165,7 +164,7 @@ def generate_content(api_key, model, payload):
     return json.loads(body)
 
 
-def translation_result(response):
+def translation_result(response, item_ids):
     candidates = response.get("candidates", [])
 
     if len(candidates) != 1 or candidates[0].get("finishReason") != "STOP":
@@ -180,22 +179,31 @@ def translation_result(response):
     if (
         not isinstance(result, dict)
         or set(result) != {"items"}
-        or not isinstance(result["items"], list)
+        or not isinstance(result["items"], dict)
     ):
-        raise ValueError("LLM must return an object containing an items array")
+        raise ValueError("LLM must return an items object keyed by article ID")
+
+    if set(result["items"]) != set(item_ids):
+        raise ValueError("LLM response keys must match the requested article IDs")
 
     rows = []
 
-    for item in result["items"]:
-        if not isinstance(item, dict) or set(item) != {"id", "summary_ko", "title_ko"}:
-            raise ValueError("Each LLM item must contain id, summary_ko, and title_ko")
+    for item_id in item_ids:
+        item = result["items"][item_id]
+        if not isinstance(item, dict) or set(item) != {"summary_ko", "title_ko"}:
+            raise ValueError("Each LLM item must contain summary_ko and title_ko")
 
-        rows.append([item["id"], item["title_ko"], item["summary_ko"]])
+        rows.append([item_id, item["title_ko"], item["summary_ko"]])
 
     return {"items": rows}
 
 
 def generate_translations(input_text, count):
+    item_ids = [json.loads(line)[0] for line in input_text.splitlines() if line.strip()]
+
+    if len(item_ids) != count or len(set(item_ids)) != count:
+        raise ValueError("Translation input must contain unique article IDs")
+
     api_key, model = configuration()
     request_text = (
         "Input JSONL:\n"
@@ -205,8 +213,8 @@ def generate_translations(input_text, count):
     payload = {
         "systemInstruction": {"parts": [{"text": translation_instructions()}]},
         "contents": [{"role": "user", "parts": [{"text": request_text}]}],
-        "generationConfig": generation_config(model, count),
+        "generationConfig": generation_config(model, item_ids),
     }
     response = generate_content(api_key, model, payload)
 
-    return translation_result(response)
+    return translation_result(response, item_ids)
