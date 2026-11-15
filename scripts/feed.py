@@ -17,7 +17,7 @@ from string import Template
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
-from llm import generate_translations
+from llm import generate_translation
 
 ROOT = Path(__file__).resolve().parents[1]
 HN_API_URL = "https://hacker-news.firebaseio.com/v0"
@@ -30,6 +30,7 @@ ERROR_FILE = ".cache/error.log"
 SITE_DIRECTORY = ".cache/site"
 MAX_RESPONSE_BYTES = 2_000_000
 HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
+TRANSLATION_METHOD = "single-story-v1"
 
 
 def require(condition, message):
@@ -360,7 +361,8 @@ def translation_key(article):
 
 def has_cached_translation(article, cached):
     return (
-        bool(cached.get("title_ko"))
+        cached.get("translation_method") == TRANSLATION_METHOD
+        and bool(cached.get("title_ko"))
         and "summary" in cached
         and translation_key(cached) == translation_key(article)
     )
@@ -370,7 +372,7 @@ def index_translations(stories):
     translations = {}
 
     for article in stories.values():
-        if not article.get("title_ko") or "summary" not in article:
+        if not has_cached_translation(article, article):
             continue
 
         key = translation_key(article)
@@ -517,7 +519,11 @@ def validate_translation_ids(translations, expected_ids):
     )
 
 
-def validate_summaries(result, run):
+def validate_summaries(result, run, complete=True):
+    require(
+        run.get("translation_method") == TRANSLATION_METHOD,
+        "Translation method changed; run prepare --refresh",
+    )
     require(
         isinstance(result, dict) and set(result) == {"run", "items"},
         "Expected {run: current_run_id, items: [[id, title_ko, summary], ...]}",
@@ -537,10 +543,11 @@ def validate_summaries(result, run):
         require(isinstance(item_id, str), "Translation ID must be a string")
         require(item_id not in translations, f"Duplicate translation ID: {item_id}")
 
-        require(item_id in sources, f"Unexpected translation ID: {item_id}")
+        require(item_id in run["pending"], f"Unexpected translation ID: {item_id}")
         translations[item_id] = validate_translation(title, summary, sources[item_id])
 
-    validate_translation_ids(translations, run["pending"])
+    if complete:
+        validate_translation_ids(translations, run["pending"])
     return translations
 
 
@@ -553,6 +560,7 @@ def resumable_run(base):
     run = read_json(run_path)
     can_resume = (
         "published_hash" not in run
+        and run.get("translation_method") == TRANSLATION_METHOD
         and run["base"] == base
         and (ROOT / INPUT_FILE).exists()
         and (ROOT / TRANSLATIONS_FILE).exists()
@@ -562,7 +570,7 @@ def resumable_run(base):
 
 def create_run(base, articles, requests, input_text):
     items = [article_metadata(article) for article in articles]
-    identity = base + json_text(items) + input_text
+    identity = TRANSLATION_METHOD + base + json_text(items) + input_text
 
     return {
         "id": content_hash(identity.encode())[:16],
@@ -570,6 +578,7 @@ def create_run(base, articles, requests, input_text):
         "updated_at": utc_now(),
         "items": items,
         "pending": [row[0] for row in requests],
+        "translation_method": TRANSLATION_METHOD,
     }
 
 
@@ -580,7 +589,11 @@ def save_run(run, input_text):
 
 
 def apply_translations(previous, run, translations):
-    stories = dict(previous["stories"])
+    stories = {
+        item_id: article
+        for item_id, article in previous["stories"].items()
+        if has_cached_translation(article, article)
+    }
     cache = index_translations(stories)
 
     for article in run["items"]:
@@ -589,6 +602,7 @@ def apply_translations(previous, run, translations):
             **article,
             "title_ko": translation["title_ko"],
             "summary": translation["summary"],
+            "translation_method": TRANSLATION_METHOD,
         }
 
     state = {
@@ -833,12 +847,31 @@ def prepare(source_chars=2400, refresh=False):
 def translate():
     run = read_json(ROOT / RUN_FILE)
     result = read_json(ROOT / TRANSLATIONS_FILE)
+    translations = validate_summaries(result, run, complete=False)
+    input_text = (ROOT / INPUT_FILE).read_text(encoding="utf-8")
+    requests = [json.loads(line) for line in input_text.splitlines() if line.strip()]
+    sources = {article["id"]: article for article in run["items"]}
 
-    if run["pending"] and not result["items"]:
-        input_text = (ROOT / INPUT_FILE).read_text(encoding="utf-8")
-        generated = generate_translations(input_text, len(run["pending"]))
-        result = {"run": run["id"], **generated}
+    require(
+        [row[0] for row in requests] == run["pending"],
+        "Translation input IDs do not match the prepared run",
+    )
 
+    for item_id, title, excerpt in requests:
+        require(title == sources[item_id]["title"], f"Source title changed: {item_id}")
+
+    for item_id, title, excerpt in requests:
+        if item_id in translations:
+            continue
+
+        try:
+            generated = generate_translation(title, excerpt)
+        except ValueError as error:
+            raise ValueError(f"Translation failed for HN {item_id}: {error}") from None
+
+        result["items"].append(
+            [item_id, generated["title_ko"], generated["summary_ko"]]
+        )
         write_json(ROOT / TRANSLATIONS_FILE, result)
 
     translations = validate_summaries(result, run)

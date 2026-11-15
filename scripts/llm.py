@@ -4,7 +4,7 @@ import re
 import sys
 from pathlib import Path
 from random import uniform
-from time import sleep
+from time import monotonic, sleep
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 MAX_REQUEST_RETRIES = 3
+REQUEST_INTERVAL_SECONDS = 4.1
+_next_request_at = 0.0
 
 
 def environment_values(path):
@@ -61,43 +63,29 @@ def translation_instructions():
     return instructions
 
 
-def translation_schema(item_ids):
-    row = {
+def translation_schema():
+    return {
         "type": "OBJECT",
         "properties": {
             "summary_ko": {
                 "type": "STRING",
-                "description": "Article summary written in Korean.",
+                "description": "제공된 본문 또는 사이트 설명문에 근거한 한국어 요약. 설명문을 특정 사건의 근거로 확대하지 않는다. 자료가 비었거나 접근 안내 또는 메뉴뿐이면 빈 문자열.",
             },
             "title_ko": {
                 "type": "STRING",
-                "description": "Title translated into Korean using the summary's context. Preserve only proper names in their original spelling.",
+                "description": "원제의 의미를 보존한 자연스러운 한국어 신문 기사 제목. 명사형과 질문형은 허용하되 서술어를 됨·함·음으로 끝내는 메모식 축약체는 쓰지 않는다. 고유명사는 통용되는 표기를 따른다.",
             },
         },
         "required": ["summary_ko", "title_ko"],
         "propertyOrdering": ["summary_ko", "title_ko"],
     }
 
-    return {
-        "type": "OBJECT",
-        "properties": {
-            "items": {
-                "type": "OBJECT",
-                "properties": {item_id: row for item_id in item_ids},
-                "required": item_ids,
-                "propertyOrdering": item_ids,
-            },
-        },
-        "required": ["items"],
-    }
 
-
-def generation_config(model, item_ids):
+def generation_config(model):
     settings = {
-        "temperature": 0.2,
-        "maxOutputTokens": min(16384, max(1024, len(item_ids) * 512)),
+        "maxOutputTokens": 1024,
         "responseMimeType": "application/json",
-        "responseSchema": translation_schema(item_ids),
+        "responseSchema": translation_schema(),
     }
 
     if model.startswith("gemini-3"):
@@ -106,6 +94,16 @@ def generation_config(model, item_ids):
         settings["thinkingConfig"] = {"thinkingBudget": 0}
 
     return settings
+
+
+def wait_for_request_slot():
+    global _next_request_at
+    delay = _next_request_at - monotonic()
+
+    if delay > 0:
+        sleep(delay)
+
+    _next_request_at = monotonic() + REQUEST_INTERVAL_SECONDS
 
 
 def retryable_request_error(error):
@@ -125,6 +123,8 @@ def request_failure(error):
 
 def request_content(request):
     for attempt in range(MAX_REQUEST_RETRIES + 1):
+        wait_for_request_slot()
+
         try:
             with urlopen(request, timeout=180) as response:
                 return response.read(2_000_001)
@@ -164,7 +164,7 @@ def generate_content(api_key, model, payload):
     return json.loads(body)
 
 
-def translation_result(response, item_ids):
+def translation_result(response):
     candidates = response.get("candidates", [])
 
     if len(candidates) != 1 or candidates[0].get("finishReason") != "STOP":
@@ -176,45 +176,25 @@ def translation_result(response, item_ids):
     text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
     result = json.loads(text)
 
-    if (
-        not isinstance(result, dict)
-        or set(result) != {"items"}
-        or not isinstance(result["items"], dict)
-    ):
-        raise ValueError("LLM must return an items object keyed by article ID")
+    if not isinstance(result, dict) or set(result) != {"summary_ko", "title_ko"}:
+        raise ValueError("LLM response must contain summary_ko and title_ko only")
 
-    if set(result["items"]) != set(item_ids):
-        raise ValueError("LLM response keys must match the requested article IDs")
-
-    rows = []
-
-    for item_id in item_ids:
-        item = result["items"][item_id]
-        if not isinstance(item, dict) or set(item) != {"summary_ko", "title_ko"}:
-            raise ValueError("Each LLM item must contain summary_ko and title_ko")
-
-        rows.append([item_id, item["title_ko"], item["summary_ko"]])
-
-    return {"items": rows}
+    return result
 
 
-def generate_translations(input_text, count):
-    item_ids = [json.loads(line)[0] for line in input_text.splitlines() if line.strip()]
-
-    if len(item_ids) != count or len(set(item_ids)) != count:
-        raise ValueError("Translation input must contain unique article IDs")
-
+def generate_translation(title, excerpt):
     api_key, model = configuration()
+    source = json.dumps({"title": title, "excerpt": excerpt}, ensure_ascii=False)
     request_text = (
-        "Input JSONL:\n"
-        + input_text.rstrip()
-        + "\n\n위 기사의 본문을 한국어로 요약하고, 제목도 한국어로 번역하세요."
+        "## 기사 자료\n" + source + "\n\n## 작업\n"
+        "위 자료만 근거로 본문을 한국어로 요약한 뒤, 그 맥락에 맞게 원제목을 번역하세요. "
+        "지정된 JSON만 반환하세요."
     )
     payload = {
         "systemInstruction": {"parts": [{"text": translation_instructions()}]},
         "contents": [{"role": "user", "parts": [{"text": request_text}]}],
-        "generationConfig": generation_config(model, item_ids),
+        "generationConfig": generation_config(model),
     }
     response = generate_content(api_key, model, payload)
 
-    return translation_result(response, item_ids)
+    return translation_result(response)
