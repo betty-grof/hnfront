@@ -73,7 +73,7 @@ def translation_schema():
             },
             "title_ko": {
                 "type": "STRING",
-                "description": "원제의 의미를 보존한 자연스러운 한국어 신문 기사 제목. 명사형과 질문형은 허용하되 서술어를 됨·함·음으로 끝내는 메모식 축약체는 쓰지 않는다. 고유명사는 통용되는 표기를 따른다.",
+                "description": "원제목에 있는 정보만 옮긴 자연스러운 한국어 기사 제목. 본문에만 있는 고유명사나 사실을 추가하지 않는다. 명사형과 질문형은 허용하되 메모식 종결은 쓰지 않는다. 고유명사는 통용 표기를 따른다.",
             },
         },
         "required": ["summary_ko", "title_ko"],
@@ -187,7 +187,8 @@ def generate_translation(title, excerpt):
     source = json.dumps({"title": title, "excerpt": excerpt}, ensure_ascii=False)
     request_text = (
         "## 기사 자료\n" + source + "\n\n## 작업\n"
-        "위 자료만 근거로 본문을 한국어로 요약한 뒤, 그 맥락에 맞게 원제목을 번역하세요. "
+        "위 자료만 근거로 본문을 한국어로 요약한 뒤, 그 맥락으로 원제목의 뜻을 해석해 번역하세요. "
+        "제목에는 원제목에 없는 정보를 추가하지 마세요. "
         "지정된 JSON만 반환하세요."
     )
     payload = {
