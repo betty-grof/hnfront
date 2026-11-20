@@ -31,6 +31,7 @@ SITE_DIRECTORY = ".cache/site"
 MAX_RESPONSE_BYTES = 2_000_000
 HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
 TRANSLATION_METHOD = "single-story-v1"
+MAX_CACHED_STORIES = 150
 
 
 def require(condition, message):
@@ -368,6 +369,45 @@ def has_cached_translation(article, cached):
     )
 
 
+def story_instant(article):
+    try:
+        instant = datetime.fromisoformat(article["published_at"])
+    except (KeyError, TypeError, ValueError):
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+    if instant.tzinfo is None:
+        return instant.replace(tzinfo=timezone.utc)
+
+    return instant
+
+
+def prune_stories(stories, order, limit=MAX_CACHED_STORIES):
+    """Keep the stories on the current page and the most recent cached ones.
+
+    Stories that leave the page stay cached so a story that returns to the page
+    is not translated again. Without a limit that cache grows forever, so only
+    the newest ``limit`` stories that are not on the page are kept.
+    """
+    current = set(order)
+    past = [
+        (item_id, article)
+        for item_id, article in stories.items()
+        if item_id not in current
+    ]
+
+    if len(past) <= limit:
+        return stories
+
+    past.sort(key=lambda pair: (story_instant(pair[1]), pair[0]))
+    retained = {item_id for item_id, _ in past[len(past) - limit :]}
+
+    return {
+        item_id: article
+        for item_id, article in stories.items()
+        if item_id in current or item_id in retained
+    }
+
+
 def index_translations(stories):
     translations = {}
 
@@ -605,10 +645,11 @@ def apply_translations(previous, run, translations):
             "translation_method": TRANSLATION_METHOD,
         }
 
+    order = [article["id"] for article in run["items"]]
     state = {
         "updated_at": previous["updated_at"],
-        "order": [article["id"] for article in run["items"]],
-        "stories": stories,
+        "order": order,
+        "stories": prune_stories(stories, order),
     }
 
     if state == previous:
