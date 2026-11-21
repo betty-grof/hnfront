@@ -376,11 +376,27 @@
         <a href="https://news.ycombinator.com/" target="_blank" rel="noopener noreferrer">news.ycombinator.com</a>
         <a href="https://github.com/parksb/hnfront" target="_blank" rel="noopener noreferrer">github.com/parksb/hnfront</a>
         <button type="button" class="theme-toggle" aria-label="Theme: system (click for light)" title="Theme: system (click for light)">
-          <svg class="theme-icon-system" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M6.76 11.04A3.7 3.7 0 1 1 11.04 6.76"></path>
-            <path d="M2.7 7.4 1.4 7.4M4.08 4.08 3.16 3.16M7.4 2.7V1.4"></path>
-            <path d="M20.29 14.06A4.9 4.9 0 1 1 14.06 20.29A4.5 4.5 0 0 0 20.29 14.06Z"></path>
-            <path d="M4 20 20 4"></path>
+          <svg class="theme-icon-system" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <defs>
+              <mask id="theme-system-cut-low" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+                <path d="M 0 0 L 0 24 L 24 0 Z" fill="#ffffff"></path>
+                <path d="M 12 12 L 22 2 M 12 12 L 2 22" fill="none" stroke="#000000" stroke-width="3"></path>
+              </mask>
+              <mask id="theme-system-cut-high" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+                <path d="M 24 0 L 24 24 L 0 24 Z" fill="#ffffff"></path>
+                <path d="M 12 12 L 22 2 M 12 12 L 2 22" fill="none" stroke="#000000" stroke-width="3"></path>
+              </mask>
+            </defs>
+            <g mask="url(#theme-system-cut-low)">
+              <path d="M 9.88 2.75 C 7.63 4.44 6.95 7.55 8.38 10.06 C 9.88 12.65 13.03 13.55 15.63 12.35"></path>
+              <path d="M 9.88 2.75 H 9.5 C 5.77 2.75 2.75 5.77 2.75 9.5 C 2.75 13.23 5.77 16.25 9.5 16.25 C 12.2 16.25 14.55 14.65 15.62 12.35"></path>
+            </g>
+            <g mask="url(#theme-system-cut-high)">
+              <path d="M 14.5 10.75 C 16.57 10.75 18.25 12.43 18.25 14.5 C 18.25 16.57 16.57 18.25 14.5 18.25 C 12.43 18.25 10.75 16.57 10.75 14.5 C 10.75 12.43 12.43 10.75 14.5 10.75 Z"></path>
+              <path d="M 14.5 7.75 V 7 M 14.5 21.25 V 22 M 7.75 14.5 H 7 M 21.25 14.5 H 22"></path>
+              <path d="M 9.63 9.63 L 9.25 9.25 M 9.63 19.38 L 9.25 19.76 M 19.38 9.63 L 19.76 9.25 M 19.38 19.38 L 19.76 19.76"></path>
+            </g>
+            <path d="M 12 12 L 22 2 M 12 12 L 2 22"></path>
           </svg>
           <svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="4"></circle>
