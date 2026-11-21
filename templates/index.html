@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko" data-mode="system">
+<html lang="ko" data-mode="system" data-next="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,12 +17,14 @@
       }
 
       var theme = mode;
+      var next = mode === 'system' ? 'light' : mode === 'light' ? 'dark' : 'system';
 
       if (mode === 'system') {
         theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       }
 
       document.documentElement.dataset.mode = mode;
+      document.documentElement.dataset.next = next;
       document.documentElement.dataset.theme = theme;
 
       var meta = document.querySelector('meta[name="theme-color"]');
@@ -284,6 +286,7 @@
     .theme-toggle {
       display: inline-flex;
       align-items: center;
+      gap: 4px;
       padding: 0;
       border: 0;
       background: none;
@@ -309,9 +312,16 @@
       height: 14px;
     }
 
-    :root[data-mode="system"] .theme-toggle .theme-icon-system,
-    :root[data-mode="light"] .theme-toggle .theme-icon-light,
-    :root[data-mode="dark"] .theme-toggle .theme-icon-dark {
+    .theme-label {
+      display: none;
+    }
+
+    :root[data-next="system"] .theme-toggle .theme-icon-system,
+    :root[data-next="light"] .theme-toggle .theme-icon-light,
+    :root[data-next="dark"] .theme-toggle .theme-icon-dark,
+    :root[data-next="system"] .theme-label-system,
+    :root[data-next="light"] .theme-label-light,
+    :root[data-next="dark"] .theme-label-dark {
       display: block;
     }
 
@@ -367,10 +377,16 @@
         <a href="https://github.com/parksb/hnfront" target="_blank" rel="noopener noreferrer">github.com/parksb/hnfront</a>
         <button type="button" class="theme-toggle" aria-label="Theme: system (click for light)" title="Theme: system (click for light)">
           <svg class="theme-icon-system" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="18.5" y1="5.5" x2="5.5" y2="18.5"></line>
-            <circle cx="7" cy="7" r="2.8"></circle>
-            <path d="M7 3.4V1.6M3.4 7H1.6M5.3 5.3 3.9 3.9"></path>
-            <path d="M21.8 18.5a5.2 5.2 0 1 1-5.5-5.5 4.2 4.2 0 0 0 5.5 5.5z"></path>
+            <defs>
+              <mask id="theme-system-moon-bite" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+                <rect x="0" y="0" width="24" height="24" fill="#ffffff"></rect>
+                <circle cx="14.6" cy="14.7" r="4.3" fill="#000000"></circle>
+              </mask>
+            </defs>
+            <path d="M8.18 15.82A5.4 5.4 0 0 1 15.82 8.18Z" fill="currentColor" stroke="none"></path>
+            <path d="M15.82 8.18A5.4 5.4 0 0 1 8.18 15.82Z" fill="currentColor" stroke="none" mask="url(#theme-system-moon-bite)"></path>
+            <path d="M12 4.4V2.6M6.9 6.9 5.7 5.7M4.4 12H2.6"></path>
+            <line x1="20.5" y1="3.5" x2="3.5" y2="20.5"></line>
           </svg>
           <svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="4"></circle>
@@ -379,6 +395,9 @@
           <svg class="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
           </svg>
+          <span class="theme-label theme-label-system">system</span>
+          <span class="theme-label theme-label-light">light</span>
+          <span class="theme-label theme-label-dark">dark</span>
         </button>
       </nav>
     </div>
@@ -427,14 +446,16 @@
 
     function applyMode(mode) {
       const theme = resolvedTheme(mode);
+      const next = nextMode(mode);
 
       document.documentElement.dataset.mode = mode;
+      document.documentElement.dataset.next = next;
       document.documentElement.dataset.theme = theme;
 
       if (themeMeta) themeMeta.content = THEME_COLORS[theme];
 
       if (themeToggle) {
-        const label = 'Theme: ' + mode + ' (click for ' + nextMode(mode) + ')';
+        const label = 'Theme: ' + mode + ' (click for ' + next + ')';
         themeToggle.setAttribute('aria-label', label);
         themeToggle.title = label;
       }
