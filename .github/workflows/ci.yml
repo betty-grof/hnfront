@@ -106,62 +106,15 @@ jobs:
             echo "| Stories rendered | $stories |"
             echo "| Page size | $bytes bytes |"
             echo '| Rendered site | `site-preview` artifact |'
-            echo '| Screenshots | `site-screenshots` artifact |'
             echo
             echo 'Download `site-preview`, unzip it, and open `index.html` in a browser.'
             echo 'The page is static, so it renders straight from disk.'
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Capture desktop and mobile screenshots
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-
-          browser=$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || true)
-          if [ -z "$browser" ]; then
-            echo 'No headless browser on this runner; skipping screenshots.'
-            exit 0
-          fi
-
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq fonts-noto-cjk
-          fc-cache -f > /dev/null
-
-          mkdir -p .cache/preview
-          page="file://$PWD/.cache/site/index.html"
-
-          capture() {
-            "$browser" \
-              --headless=new \
-              --no-sandbox \
-              --disable-gpu \
-              --hide-scrollbars \
-              --force-device-scale-factor=1 \
-              --virtual-time-budget=4000 \
-              --window-size="$1" \
-              --screenshot=".cache/preview/$2.png" \
-              "$page"
-          }
-
-          capture 1280,1600 desktop
-          capture 390,844 mobile
-
-          ls -l .cache/preview
 
       - name: Upload site preview
         uses: actions/upload-artifact@v7
         with:
           name: site-preview
           path: .cache/site
-          retention-days: 14
-          overwrite: true
-
-      - name: Upload screenshots
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: site-screenshots
-          path: .cache/preview
-          if-no-files-found: ignore
           retention-days: 14
           overwrite: true
