@@ -330,7 +330,7 @@
       <nav aria-label="Links">
         <a href="https://news.ycombinator.com/" target="_blank" rel="noopener noreferrer">news.ycombinator.com</a>
         <a href="https://github.com/parksb/hnfront" target="_blank" rel="noopener noreferrer">github.com/parksb/hnfront</a>
-        <a class="theme-toggle" href="#">light/dark</a>
+        <a class="theme-toggle" href="#" aria-label="Switch to dark mode">dark</a>
       </nav>
     </div>
   </footer>
@@ -367,8 +367,9 @@
       if (themeMeta) themeMeta.content = THEME_COLORS[theme];
 
       if (themeToggle) {
-        const label = theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환';
-        themeToggle.setAttribute('aria-label', label);
+        const isDark = theme === 'dark';
+        themeToggle.textContent = isDark ? 'light' : 'dark';
+        themeToggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
       }
     }
 
