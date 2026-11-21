@@ -5,6 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Hacker News front-page stories, summarized in Korean">
   <meta name="theme-color" content="#ffffff">
+  <script>
+    (function () {
+      var theme = null;
+
+      try {
+        theme = localStorage.getItem('theme');
+      } catch (error) {
+        theme = null;
+      }
+
+      if (theme !== 'light' && theme !== 'dark') {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+
+      document.documentElement.dataset.theme = theme;
+
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = theme === 'dark' ? '#141517' : '#ffffff';
+    })();
+  </script>
   <meta name="referrer" content="no-referrer">
   <title>hnfront</title>
   <meta property="og:type" content="website">
@@ -20,45 +40,281 @@
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" sizes="any">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
   <style>
-    :root { color-scheme: light; --paper: #fff; --ink: #222; --muted: #888; --accent: #ff6600; }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--paper); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; -webkit-font-smoothing: antialiased; }
-    a { color: inherit; text-decoration: none; }
-    a:hover { color: var(--accent); }
-    a:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; border-radius: 2px; }
-    main { width: min(100% - 48px, 840px); margin: 28px auto 32px; }
-    .skip { position: absolute; top: -60px; left: 20px; padding: 12px; background: var(--ink); color: white; z-index: 3; }
-    .skip:focus { top: 12px; }
-    .feed { padding: 0; margin: 0; list-style: none; }
-    .story { display: flow-root; padding: 24px 0 32px; }
-    h2 { margin: 0; font-size: 18px; line-height: 1.55; font-weight: 600; letter-spacing: -.4px; word-break: keep-all; overflow-wrap: anywhere; }
-    h2 a:visited { color: #555; }
-    .summary { margin: 10px 0 14px; font-size: 15px; line-height: 1.75; color: #555; word-break: keep-all; overflow-wrap: anywhere; }
-    .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 12px; line-height: 1.6; color: var(--muted); }
-    .source { overflow-wrap: anywhere; }
-    time { white-space: nowrap; }
-    footer { padding: 24px 0; background: var(--accent); color: var(--paper); font-size: 11px; line-height: 1.6; text-align: left; }
-    .footer-inner { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; width: min(100% - 48px, 840px); margin: 0 auto; line-height: 0.8; }
-    footer a:hover { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
-    footer a:focus-visible { outline-color: currentColor; }
-    footer nav { display: flex; flex-wrap: wrap; gap: 12px; }
-    .points, .comments { display: inline-flex; align-items: center; gap: 5px; }
-    .points svg, .comments svg { width: 14px; height: 14px; flex-shrink: 0; }
-    .points svg { width: 10px; height: 10px; }
-    .thumb { float: right; width: 200px; margin: 3px 0 16px 24px; aspect-ratio: 2 / 1; overflow: hidden; border-radius: 2px; }
-    .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
-    .thumb[hidden] { display: none; }
-    .empty { padding: 40px 0; color: var(--muted); font-size: 13px; }
-    .story .katex { font-size: 1.05em; }
-    .story .katex-display { margin: 12px 0; overflow-x: auto; overflow-y: hidden; }
+    /* Theme */
+
+    :root {
+      color-scheme: light;
+
+      --paper: #ffffff;
+      --ink: #222222;
+      --summary: #555555;
+      --visited: #555555;
+      --muted: #6b7280;
+      --accent: #ff6600;
+      --accent-text: #c2410c;
+      --footer-bg: var(--accent);
+      --footer-ink: #1e1e1e;
+      --thumb-opacity: 1;
+      --thumb-filter: none;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+
+      --paper: #141517;
+      --ink: #e4e6eb;
+      --summary: #c3c7cf;
+      --visited: #9aa1ad;
+      --muted: #8e95a2;
+      --accent: #ff8533;
+      --accent-text: #ff8533;
+      --footer-bg: var(--accent);
+      --footer-ink: #17181a;
+      --thumb-opacity: 0.9;
+      --thumb-filter: brightness(0.85);
+    }
+
+    /* Base */
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    a:hover {
+      color: var(--accent-text);
+    }
+
+    a:focus-visible {
+      outline: 2px solid var(--accent-text);
+      outline-offset: 5px;
+      border-radius: 2px;
+    }
+
+    main {
+      width: min(100% - 48px, 840px);
+      margin: 28px auto 32px;
+    }
+
+    .skip {
+      position: absolute;
+      top: -60px;
+      left: 20px;
+      padding: 12px;
+      background: var(--ink);
+      color: var(--paper);
+      z-index: 3;
+    }
+
+    .skip:focus {
+      top: 12px;
+    }
+
+    /* Feed */
+
+    .feed {
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    .story {
+      display: flow-root;
+      padding: 24px 0 32px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.55;
+      font-weight: 600;
+      letter-spacing: -.4px;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+
+    h2 a:visited {
+      color: var(--visited);
+    }
+
+    .summary {
+      margin: 10px 0 14px;
+      font-size: 15px;
+      line-height: 1.75;
+      color: var(--summary);
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .source {
+      overflow-wrap: anywhere;
+    }
+
+    time {
+      white-space: nowrap;
+    }
+
+    .points,
+    .comments {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .points svg,
+    .comments svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .points svg {
+      width: 10px;
+      height: 10px;
+    }
+
+    /* Thumbnails */
+
+    .thumb {
+      float: right;
+      width: 200px;
+      margin: 3px 0 16px 24px;
+      aspect-ratio: 2 / 1;
+      overflow: hidden;
+      border-radius: 2px;
+    }
+
+    .thumb img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: var(--thumb-opacity);
+      filter: var(--thumb-filter);
+    }
+
+    .thumb img:hover {
+      opacity: 1;
+    }
+
+    .thumb[hidden] {
+      display: none;
+    }
+
+    .empty {
+      padding: 40px 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .story .katex {
+      font-size: 1.05em;
+    }
+
+    .story .katex-display {
+      margin: 12px 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    /* Footer */
+
+    footer {
+      padding: 24px 0;
+      background: var(--footer-bg);
+      color: var(--footer-ink);
+      font-size: 11px;
+      line-height: 1.6;
+      text-align: left;
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      width: min(100% - 48px, 840px);
+      margin: 0 auto;
+      line-height: 0.8;
+    }
+
+    footer a:hover {
+      color: inherit;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    footer a:focus-visible {
+      outline-color: currentColor;
+    }
+
+    footer nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .theme-toggle {
+      cursor: pointer;
+    }
+
+    /* Layout */
+
     @media (max-width: 640px) {
-      main, .footer-inner { width: calc(100% - 40px); }
-      main { margin-top: 8px; }
-      .story { padding: 20px 0 28px; }
-      .story article { display: flow-root; }
-      h2 { font-size: 17px; }
-      .thumb { float: right; width: 160px; max-width: 48%; margin: 10px 0 10px 16px; }
-      .meta { clear: both; gap: 10px; }
+      main,
+      .footer-inner {
+        width: calc(100% - 40px);
+      }
+
+      main {
+        margin-top: 8px;
+      }
+
+      .story {
+        padding: 20px 0 28px;
+      }
+
+      .story article {
+        display: flow-root;
+      }
+
+      h2 {
+        font-size: 17px;
+      }
+
+      .thumb {
+        float: right;
+        width: 160px;
+        max-width: 48%;
+        margin: 10px 0 10px 16px;
+      }
+
+      .meta {
+        clear: both;
+        gap: 10px;
+      }
     }
   </style>
 </head>
@@ -74,15 +330,77 @@
       <nav aria-label="Links">
         <a href="https://news.ycombinator.com/" target="_blank" rel="noopener noreferrer">news.ycombinator.com</a>
         <a href="https://github.com/parksb/hnfront" target="_blank" rel="noopener noreferrer">github.com/parksb/hnfront</a>
+        <a class="theme-toggle" href="#" aria-label="Switch to dark mode">dark</a>
       </nav>
     </div>
   </footer>
   <script src="assets/math.js" defer></script>
   <script>
+    const THEME_COLORS = { light: '#ffffff', dark: '#141517' };
+
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    const themeToggle = document.querySelector('.theme-toggle');
+    const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    function storedTheme() {
+      try {
+        const value = localStorage.getItem('theme');
+        if (value === 'light' || value === 'dark') return value;
+      } catch (error) {
+        // Storage can be unavailable, for example in private mode or on file://.
+      }
+
+      return null;
+    }
+
+    function saveTheme(theme) {
+      try {
+        localStorage.setItem('theme', theme);
+      } catch (error) {
+        // The toggle still works for this page view.
+      }
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+
+      if (themeMeta) themeMeta.content = THEME_COLORS[theme];
+
+      if (themeToggle) {
+        const isDark = theme === 'dark';
+        themeToggle.textContent = isDark ? 'light' : 'dark';
+        themeToggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+      }
+    }
+
+    function toggleTheme(event) {
+      event.preventDefault();
+
+      const current = document.documentElement.dataset.theme;
+      const next = current === 'dark' ? 'light' : 'dark';
+
+      applyTheme(next);
+      saveTheme(next);
+    }
+
+    if (themeToggle) {
+      themeToggle.addEventListener('click', toggleTheme);
+    }
+
+    darkQuery.addEventListener('change', function (event) {
+      // A saved choice wins over the system setting.
+      if (storedTheme()) return;
+
+      applyTheme(event.matches ? 'dark' : 'light');
+    });
+
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+
     const dateFormat = new Intl.DateTimeFormat('en-CA', {
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
     });
+
     const relativeFormat = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
 
     function timezoneOffset(date) {
