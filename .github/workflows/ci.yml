@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.4.0
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Check Python formatting
+        run: uv run --locked ruff format --check scripts
+
+      - name: Lint Python
+        run: uv run --locked ruff check scripts
+
+      - name: Type check Python
+        run: uv run --locked mypy scripts
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Check JavaScript syntax
+        run: node --check assets/math.js
+
+  preview:
+    name: Preview build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.4.0
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Render static site
+        run: uv run --locked --no-dev python scripts/feed.py render
+
+      - name: Verify rendered site
+        run: |
+          set -euo pipefail
+          page=.cache/site/index.html
+
+          test -s "$page"
+          test -f .cache/site/assets/math.js
+          diff -r assets .cache/site/assets
+
+          grep -q '<ol class="feed">' "$page"
+
+          stories=$(grep -c 'class="story"' "$page" || true)
+          if [ "$stories" -eq 0 ]; then
+            echo 'error: the rendered page has no stories' >&2
+            exit 1
+          fi
+
+          if grep -o -E '\$(stories|published|empty)' "$page"; then
+            echo 'error: unsubstituted template placeholder' >&2
+            exit 1
+          fi
+
+          bytes=$(wc -c < "$page")
+          echo "stories=$stories bytes=$bytes"
+
+          {
+            echo '## Site preview'
+            echo
+            echo '| Check | Value |'
+            echo '| --- | --- |'
+            echo "| Stories rendered | $stories |"
+            echo "| Page size | $bytes bytes |"
+            echo '| Rendered site | `site-preview` artifact |'
+            echo '| Screenshots | `site-screenshots` artifact |'
+            echo
+            echo 'Download `site-preview`, unzip it, and open `index.html` in a browser.'
+            echo 'The page is static, so it renders straight from disk.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture desktop and mobile screenshots
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+
+          browser=$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || true)
+          if [ -z "$browser" ]; then
+            echo 'No headless browser on this runner; skipping screenshots.'
+            exit 0
+          fi
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk
+          fc-cache -f > /dev/null
+
+          mkdir -p .cache/preview
+          page="file://$PWD/.cache/site/index.html"
+
+          capture() {
+            "$browser" \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --hide-scrollbars \
+              --force-device-scale-factor=1 \
+              --virtual-time-budget=4000 \
+              --window-size="$1" \
+              --screenshot=".cache/preview/$2.png" \
+              "$page"
+          }
+
+          capture 1280,1600 desktop
+          capture 390,844 mobile
+
+          ls -l .cache/preview
+
+      - name: Upload site preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-preview
+          path: .cache/site
+          retention-days: 14
+          overwrite: true
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-screenshots
+          path: .cache/preview
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true

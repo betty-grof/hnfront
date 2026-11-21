@@ -2,7 +2,6 @@ import argparse
 import gzip
 import json
 import os
-import re
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -114,7 +113,7 @@ def canonical_article_url(url):
 
 
 def unique_by(values, key):
-    unique = {}
+    unique: dict = {}
 
     for value in values:
         unique.setdefault(key(value), value)
@@ -827,7 +826,7 @@ def changed_paths():
         ("diff", "--cached", "--name-only", "-z"),
         ("ls-files", "--others", "--exclude-standard", "-z"),
     ]
-    paths = set()
+    paths: set[str] = set()
 
     for command in commands:
         paths.update(path for path in git(*command).split("\0") if path)
@@ -898,7 +897,7 @@ def translate():
         "Translation input IDs do not match the prepared run",
     )
 
-    for item_id, title, excerpt in requests:
+    for item_id, title, _excerpt in requests:
         require(title == sources[item_id]["title"], f"Source title changed: {item_id}")
 
     for item_id, title, excerpt in requests:

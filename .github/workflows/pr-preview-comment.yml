@@ -1,0 +1,131 @@
+name: PR preview comment
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  comment:
+    name: Publish preview
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Resolve pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          number=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/pulls" --jq '.[0].number // empty')
+
+          if [ -z "$number" ]; then
+            number=$(gh pr list --repo "$GITHUB_REPOSITORY" --search "$HEAD_SHA" --state all --json number --jq '.[0].number // empty')
+          fi
+
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Download artifacts
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name site-preview --dir site
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name site-screenshots --dir shots || echo 'No screenshots in this run.'
+
+      - name: Publish preview branch
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          preview="$RUNNER_TEMP/preview"
+
+          rm -rf "$preview"
+          git init --quiet "$preview"
+          cd "$preview"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          if git ls-remote --exit-code --heads origin pr-previews > /dev/null; then
+            git fetch --quiet origin pr-previews
+            git checkout --quiet -B pr-previews FETCH_HEAD
+          fi
+
+          rm -rf "pr-${NUMBER}"
+          mkdir -p "pr-${NUMBER}"
+          cp -R "${GITHUB_WORKSPACE}/site/." "pr-${NUMBER}/"
+
+          for shot in desktop mobile; do
+            if [ -f "${GITHUB_WORKSPACE}/shots/${shot}.png" ]; then
+              cp "${GITHUB_WORKSPACE}/shots/${shot}.png" "pr-${NUMBER}/"
+            fi
+          done
+
+          git add "pr-${NUMBER}"
+          if git status --porcelain | grep -q .; then
+            git commit --quiet -m "preview: pull request ${NUMBER}"
+            git push --quiet origin HEAD:refs/heads/pr-previews
+          else
+            echo 'Preview content is unchanged.'
+          fi
+
+      - name: Comment on pull request
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/pr-previews/pr-${NUMBER}"
+          page="https://htmlpreview.github.io/?https://github.com/${GITHUB_REPOSITORY}/blob/pr-previews/pr-${NUMBER}/index.html"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
+          body="$RUNNER_TEMP/comment.md"
+
+          {
+            echo '<!-- pr-preview -->'
+            echo 'Preview for this pull request is ready.'
+            echo
+            echo "[Open the rendered page](${page})"
+            echo
+            echo "[Download the workflow artifacts](${run_url})"
+            if [ -f "${GITHUB_WORKSPACE}/shots/desktop.png" ]; then
+              echo
+              echo '**Desktop**'
+              echo
+              echo "![Desktop preview](${base}/desktop.png)"
+            fi
+            if [ -f "${GITHUB_WORKSPACE}/shots/mobile.png" ]; then
+              echo
+              echo '**Mobile**'
+              echo
+              echo "![Mobile preview](${base}/mobile.png)"
+            fi
+          } > "$body"
+
+          text=$(cat "$body")
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${NUMBER}/comments" --paginate --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- pr-preview -->"))) | .id' | head -n 1)
+
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" --raw-field body="$text" > /dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${NUMBER}/comments" --raw-field body="$text" > /dev/null
+          fi

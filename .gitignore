@@ -1,5 +1,6 @@
 .DS_Store
 .cache/
+.venv/
 __pycache__/
 *.pyc
 /index.html
