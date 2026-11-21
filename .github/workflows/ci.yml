@@ -25,18 +25,24 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.4.0
         with:
-          python-version: '3.12'
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked
 
       - name: Check Python formatting
-        run: uvx ruff==0.17.6 format --check scripts
+        run: uv run --locked ruff format --check scripts
 
       - name: Lint Python
-        run: uvx ruff==0.17.6 check scripts
+        run: uv run --locked ruff check scripts
 
       - name: Type check Python
-        run: uvx mypy==2.4.1 scripts
+        run: uv run --locked mypy scripts
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -57,12 +63,15 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.4.0
         with:
-          python-version: '3.12'
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
 
       - name: Render static site
-        run: uv run --python 3.12 python scripts/feed.py render
+        run: uv run --locked --no-dev python scripts/feed.py render
 
       - name: Verify rendered site
         run: |
